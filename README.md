@@ -36,7 +36,7 @@ The result: a personal "sonic fingerprint" that reveals patterns in your taste y
 
 ## 🏗️ Architecture
 
-![Sonigram Architecture](sonigram_architecture_v2.png)
+![Sonigram Architecture](screenshots/sonigram_architecture_v2.png)
 
 ## 🚀 Getting Started
 
