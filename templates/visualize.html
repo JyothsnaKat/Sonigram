@@ -1,0 +1,659 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Your Music Map · Sonigram</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0a0a0f;
+      --surface: #111118;
+      --surface2: #16161f;
+      --border: rgba(255,255,255,0.07);
+      --green: #1DB954;
+      --text: #e8e8f0;
+      --muted: #5a5a72;
+      --panel-w: 300px;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'DM Mono', monospace;
+      height: 100vh;
+      display: grid;
+      grid-template-columns: 1fr var(--panel-w);
+      grid-template-rows: 52px 1fr;
+      overflow: hidden;
+    }
+
+    /* ── NAV ── */
+    nav {
+      grid-column: 1 / -1;
+      display: flex;
+      align-items: center;
+      padding: 0 1.5rem;
+      border-bottom: 1px solid var(--border);
+      background: rgba(10,10,15,0.85);
+      backdrop-filter: blur(12px);
+      gap: 1rem;
+      z-index: 10;
+    }
+    .logo {
+      font-family: 'Instrument Serif', serif;
+      font-size: 1.1rem;
+      color: var(--green);
+    }
+    .nav-sep { flex: 1; }
+    .nav-stat { font-size: 0.65rem; color: var(--muted); letter-spacing: 0.08em; }
+    .nav-stat span { color: var(--text); }
+    .nav-link {
+      font-size: 0.65rem;
+      color: var(--muted);
+      text-decoration: none;
+      letter-spacing: 0.06em;
+      padding: 0.3rem 0.7rem;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      transition: color 0.15s, border-color 0.15s;
+    }
+    .nav-link:hover { color: var(--text); border-color: rgba(255,255,255,0.2); }
+
+    /* ── CANVAS AREA ── */
+    #map-container {
+      position: relative;
+      overflow: hidden;
+      background: var(--bg);
+    }
+    canvas#map {
+      position: absolute; inset: 0;
+      cursor: crosshair;
+    }
+
+    /* Loading state */
+    #loading {
+      position: absolute; inset: 0;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      gap: 1rem; z-index: 5;
+    }
+    .spinner {
+      width: 36px; height: 36px;
+      border: 2px solid var(--border);
+      border-top-color: var(--green);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .loading-text { font-size: 0.7rem; color: var(--muted); letter-spacing: 0.1em; }
+
+    /* Tooltip */
+    #tooltip {
+      position: absolute;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.75rem 1rem;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.15s;
+      z-index: 20;
+      max-width: 200px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+    }
+    #tooltip.visible { opacity: 1; }
+    .tt-img {
+      width: 40px; height: 40px;
+      border-radius: 4px;
+      object-fit: cover;
+      margin-bottom: 0.5rem;
+      display: block;
+    }
+    .tt-name { font-size: 0.75rem; font-weight: 500; line-height: 1.3; margin-bottom: 0.2rem; }
+    .tt-artist { font-size: 0.65rem; color: var(--muted); margin-bottom: 0.5rem; }
+    .tt-cluster {
+      font-size: 0.6rem;
+      letter-spacing: 0.06em;
+      padding: 0.2rem 0.5rem;
+      border-radius: 999px;
+      display: inline-block;
+    }
+    .tt-bars { margin-top: 0.6rem; }
+    .tt-bar-row { display: flex; align-items: center; gap: 0.4rem; margin-bottom: 0.25rem; }
+    .tt-bar-label { font-size: 0.55rem; color: var(--muted); width: 60px; }
+    .tt-bar-track { flex: 1; height: 3px; background: var(--border); border-radius: 2px; overflow: hidden; }
+    .tt-bar-fill { height: 100%; border-radius: 2px; transition: width 0.3s; }
+
+    /* ── SIDE PANEL ── */
+    #panel {
+      background: var(--surface);
+      border-left: 1px solid var(--border);
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      scrollbar-width: thin;
+      scrollbar-color: var(--border) transparent;
+    }
+
+    .panel-section {
+      padding: 1.25rem 1.25rem 1rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .panel-label {
+      font-size: 0.6rem;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 0.85rem;
+    }
+
+    /* Personality traits */
+    .trait-grid { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+    .trait {
+      font-size: 0.65rem;
+      padding: 0.3rem 0.6rem;
+      border-radius: 999px;
+      border: 1px solid rgba(29,185,84,0.3);
+      color: var(--green);
+      background: rgba(29,185,84,0.07);
+    }
+
+    /* Cluster legend */
+    .cluster-item {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      margin-bottom: 0.6rem;
+      cursor: pointer;
+      padding: 0.3rem;
+      border-radius: 4px;
+      transition: background 0.15s;
+    }
+    .cluster-item:hover { background: rgba(255,255,255,0.04); }
+    .cluster-item.muted { opacity: 0.35; }
+    .cluster-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    .cluster-name { font-size: 0.65rem; flex: 1; }
+    .cluster-count { font-size: 0.6rem; color: var(--muted); }
+
+    /* Radar chart */
+    #radar-canvas { display: block; margin: 0 auto; }
+
+    /* Genre cloud */
+    .genre-cloud { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+    .genre-tag {
+      font-size: 0.6rem;
+      padding: 0.25rem 0.55rem;
+      border-radius: 4px;
+      background: var(--surface2);
+      color: var(--muted);
+      border: 1px solid var(--border);
+      text-transform: capitalize;
+    }
+    .genre-tag.big { font-size: 0.75rem; color: var(--text); }
+
+    /* Top artists */
+    .artist-list { list-style: none; }
+    .artist-list li {
+      font-size: 0.7rem;
+      padding: 0.35rem 0;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      color: var(--muted);
+    }
+    .artist-list li:last-child { border-bottom: none; }
+    .artist-num { color: var(--green); font-size: 0.6rem; width: 16px; }
+
+    /* Filter bar */
+    #filter-bar {
+      position: absolute;
+      bottom: 1.5rem; left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 0.5rem;
+      background: rgba(17,17,24,0.9);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 0.5rem 1rem;
+      z-index: 15;
+      opacity: 0;
+      transition: opacity 0.4s 1s;
+    }
+    #filter-bar.visible { opacity: 1; }
+    .filter-btn {
+      font-family: 'DM Mono', monospace;
+      font-size: 0.6rem;
+      letter-spacing: 0.06em;
+      padding: 0.3rem 0.75rem;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .filter-btn.active {
+      background: var(--green);
+      border-color: var(--green);
+      color: #000;
+    }
+  </style>
+</head>
+<body>
+
+<nav>
+  <span class="logo">Sonigram</span>
+  <span class="nav-sep"></span>
+  <span class="nav-stat" id="nav-count">Loading…</span>
+  <a href="/" class="nav-link">← Home</a>
+  <a href="/logout" class="nav-link">Logout</a>
+</nav>
+
+<div id="map-container">
+  <canvas id="map"></canvas>
+
+  <div id="loading">
+    <div class="spinner"></div>
+    <div class="loading-text">Fetching your universe…</div>
+  </div>
+
+  <div id="tooltip">
+    <img class="tt-img" id="tt-img" src="" alt="">
+    <div class="tt-name" id="tt-name"></div>
+    <div class="tt-artist" id="tt-artist"></div>
+    <span class="tt-cluster" id="tt-cluster"></span>
+    <div class="tt-bars" id="tt-bars"></div>
+  </div>
+
+  <div id="filter-bar">
+    <button class="filter-btn active" data-cluster="all">All</button>
+  </div>
+</div>
+
+<div id="panel">
+  <div class="panel-section" id="personality-section" style="display:none">
+    <div class="panel-label">Your Sound Personality</div>
+    <div class="trait-grid" id="traits"></div>
+  </div>
+
+  <div class="panel-section">
+    <div class="panel-label">Clusters</div>
+    <div id="cluster-legend"></div>
+  </div>
+
+  <div class="panel-section">
+    <div class="panel-label">Sonic Radar</div>
+    <canvas id="radar-canvas" width="240" height="240"></canvas>
+  </div>
+
+  <div class="panel-section" id="genres-section" style="display:none">
+    <div class="panel-label">Your Genres</div>
+    <div class="genre-cloud" id="genre-cloud"></div>
+  </div>
+
+  <div class="panel-section" id="artists-section" style="display:none">
+    <div class="panel-label">Top Artists</div>
+    <ul class="artist-list" id="artist-list"></ul>
+  </div>
+</div>
+
+<script>
+let allPoints = [];
+let activeCluster = 'all';
+let hoveredPoint = null;
+let animFrame = 0;
+const canvas = document.getElementById('map');
+const ctx = canvas.getContext('2d');
+const tooltip = document.getElementById('tooltip');
+const filterBar = document.getElementById('filter-bar');
+
+// ─── RESIZE ───────────────────────────────────────────────
+function resizeCanvas() {
+  const container = document.getElementById('map-container');
+  canvas.width = container.clientWidth;
+  canvas.height = container.clientHeight;
+  if (allPoints.length) render();
+}
+window.addEventListener('resize', resizeCanvas);
+resizeCanvas();
+
+// ─── COORDINATE TRANSFORM ─────────────────────────────────
+function getScale(points) {
+  const xs = points.map(p => p.x), ys = points.map(p => p.y);
+  const minX = Math.min(...xs), maxX = Math.max(...xs);
+  const minY = Math.min(...ys), maxY = Math.max(...ys);
+  const pad = 0.1;
+  const rngX = (maxX - minX) || 1, rngY = (maxY - minY) || 1;
+  return { minX, minY, rngX, rngY, pad };
+}
+
+function toCanvas(p, scale) {
+  const { minX, minY, rngX, rngY, pad } = scale;
+  const w = canvas.width, h = canvas.height;
+  const nx = (p.x - minX) / rngX; // 0..1
+  const ny = (p.y - minY) / rngY;
+  return {
+    cx: w * (pad + nx * (1 - 2 * pad)),
+    cy: h * (pad + ny * (1 - 2 * pad))
+  };
+}
+
+// ─── RENDER ───────────────────────────────────────────────
+function render() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  const scale = getScale(allPoints);
+
+  // draw faint grid
+  ctx.strokeStyle = 'rgba(255,255,255,0.03)';
+  ctx.lineWidth = 1;
+  for (let i = 1; i < 5; i++) {
+    const x = canvas.width * i / 5;
+    const y = canvas.height * i / 5;
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
+  }
+
+  // draw points — inactive first so active dots render on top
+  const sorted = [...allPoints].sort((a, b) => {
+    const aA = activeCluster === 'all' || String(a.cluster) === String(activeCluster);
+    const bA = activeCluster === 'all' || String(b.cluster) === String(activeCluster);
+    return Number(aA) - Number(bA);
+  });
+
+  sorted.forEach(p => {
+    const { cx, cy } = toCanvas(p, scale);
+    const active = activeCluster === 'all' || String(p.cluster) === String(activeCluster);
+    const hovered = hoveredPoint && hoveredPoint.id === p.id;
+
+    const radius = hovered ? 9 : active ? 6 : 3.5;
+    const alpha = active ? (hovered ? 1 : 0.9) : 0.05;
+
+    // outer glow for hovered
+    if (hovered) {
+      ctx.beginPath();
+      ctx.arc(cx, cy, 18, 0, Math.PI * 2);
+      ctx.fillStyle = p.cluster_color + '30';
+      ctx.fill();
+    }
+
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+    ctx.fillStyle = p.cluster_color + Math.round(alpha * 255).toString(16).padStart(2, '0');
+    ctx.fill();
+
+    if (active) {
+      ctx.beginPath();
+      ctx.arc(cx, cy, radius + 1.5, 0, Math.PI * 2);
+      ctx.strokeStyle = p.cluster_color + '55';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+  });
+}
+
+// ─── MOUSE INTERACTION ────────────────────────────────────
+canvas.addEventListener('mousemove', e => {
+  const rect = canvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+  const scale = getScale(allPoints);
+
+  let closest = null, minDist = Infinity;
+  allPoints.forEach(p => {
+    const { cx, cy } = toCanvas(p, scale);
+    const d = Math.hypot(cx - mx, cy - my);
+    if (d < minDist) { minDist = d; closest = p; }
+  });
+
+  const isActive = activeCluster === 'all' || String(closest?.cluster) === String(activeCluster);
+  if (closest && minDist < 20 && isActive) {
+    hoveredPoint = closest;
+    showTooltip(closest, e.clientX, e.clientY);
+  } else {
+    hoveredPoint = null;
+    tooltip.classList.remove('visible');
+  }
+  render();
+});
+
+canvas.addEventListener('mouseleave', () => {
+  hoveredPoint = null;
+  tooltip.classList.remove('visible');
+  render();
+});
+
+function showTooltip(p, mx, my) {
+  document.getElementById('tt-name').textContent = p.name;
+  document.getElementById('tt-artist').textContent = p.artists.join(', ');
+  const clEl = document.getElementById('tt-cluster');
+  clEl.textContent = p.cluster_label;
+  clEl.style.background = p.cluster_color + '25';
+  clEl.style.color = p.cluster_color;
+  clEl.style.borderColor = p.cluster_color + '60';
+  clEl.style.border = '1px solid';
+
+  const img = document.getElementById('tt-img');
+  if (p.album_img) { img.src = p.album_img; img.style.display = 'block'; }
+  else img.style.display = 'none';
+
+  // mini bars
+  const barsEl = document.getElementById('tt-bars');
+  const barFeatures = ['energy', 'danceability', 'valence', 'acousticness'];
+  barsEl.innerHTML = barFeatures.map(k => `
+    <div class="tt-bar-row">
+      <div class="tt-bar-label">${k}</div>
+      <div class="tt-bar-track">
+        <div class="tt-bar-fill" style="width:${(p.features[k]*100).toFixed(0)}%;background:${p.cluster_color}"></div>
+      </div>
+    </div>`).join('');
+
+  // position
+  const tw = 200, th = 200;
+  let left = mx + 14, top = my - 40;
+  if (left + tw > window.innerWidth - 20) left = mx - tw - 14;
+  if (top + th > window.innerHeight - 20) top = window.innerHeight - th - 20;
+  tooltip.style.left = left + 'px';
+  tooltip.style.top = top + 'px';
+  tooltip.classList.add('visible');
+}
+
+// ─── RADAR CHART ──────────────────────────────────────────
+function drawRadar(avgFeatures) {
+  const rc = document.getElementById('radar-canvas');
+  const rctx = rc.getContext('2d');
+  const w = rc.width, h = rc.height;
+  const cx = w / 2, cy = h / 2, radius = 90;
+
+  const keys = ['energy', 'danceability', 'valence', 'acousticness', 'instrumentalness', 'speechiness'];
+  const n = keys.length;
+
+  rctx.clearRect(0, 0, w, h);
+
+  // background rings
+  [0.25, 0.5, 0.75, 1].forEach(r => {
+    rctx.beginPath();
+    for (let i = 0; i < n; i++) {
+      const angle = (i / n) * Math.PI * 2 - Math.PI / 2;
+      const x = cx + Math.cos(angle) * radius * r;
+      const y = cy + Math.sin(angle) * radius * r;
+      i === 0 ? rctx.moveTo(x, y) : rctx.lineTo(x, y);
+    }
+    rctx.closePath();
+    rctx.strokeStyle = 'rgba(255,255,255,0.06)';
+    rctx.lineWidth = 1;
+    rctx.stroke();
+  });
+
+  // axes + labels
+  keys.forEach((k, i) => {
+    const angle = (i / n) * Math.PI * 2 - Math.PI / 2;
+    const ex = cx + Math.cos(angle) * (radius + 4);
+    const ey = cy + Math.sin(angle) * (radius + 4);
+    rctx.beginPath();
+    rctx.moveTo(cx, cy);
+    rctx.lineTo(cx + Math.cos(angle) * radius, cy + Math.sin(angle) * radius);
+    rctx.strokeStyle = 'rgba(255,255,255,0.08)';
+    rctx.stroke();
+
+    // label
+    const lx = cx + Math.cos(angle) * (radius + 18);
+    const ly = cy + Math.sin(angle) * (radius + 18);
+    rctx.fillStyle = '#5a5a72';
+    rctx.font = '9px DM Mono, monospace';
+    rctx.textAlign = 'center';
+    rctx.textBaseline = 'middle';
+    rctx.fillText(k, lx, ly);
+  });
+
+  // data polygon
+  rctx.beginPath();
+  keys.forEach((k, i) => {
+    const val = avgFeatures[k] || 0;
+    const angle = (i / n) * Math.PI * 2 - Math.PI / 2;
+    const r = radius * val;
+    const x = cx + Math.cos(angle) * r;
+    const y = cy + Math.sin(angle) * r;
+    i === 0 ? rctx.moveTo(x, y) : rctx.lineTo(x, y);
+  });
+  rctx.closePath();
+  rctx.fillStyle = 'rgba(29,185,84,0.2)';
+  rctx.fill();
+  rctx.strokeStyle = '#1DB954';
+  rctx.lineWidth = 1.5;
+  rctx.stroke();
+
+  // data dots
+  keys.forEach((k, i) => {
+    const val = avgFeatures[k] || 0;
+    const angle = (i / n) * Math.PI * 2 - Math.PI / 2;
+    const r = radius * val;
+    rctx.beginPath();
+    rctx.arc(cx + Math.cos(angle) * r, cy + Math.sin(angle) * r, 3, 0, Math.PI * 2);
+    rctx.fillStyle = '#1DB954';
+    rctx.fill();
+  });
+}
+
+// ─── CLUSTER LEGEND ───────────────────────────────────────
+function buildLegend(points) {
+  const legend = document.getElementById('cluster-legend');
+  const clusterMap = {};
+  points.forEach(p => {
+    if (!clusterMap[p.cluster]) {
+      clusterMap[p.cluster] = { label: p.cluster_label, color: p.cluster_color, count: 0 };
+    }
+    clusterMap[p.cluster].count++;
+  });
+
+  // All filter
+  const allBtn = document.querySelector('[data-cluster="all"]');
+
+  Object.entries(clusterMap).sort((a,b) => b[1].count - a[1].count).forEach(([id, c]) => {
+    // legend item
+    const div = document.createElement('div');
+    div.className = 'cluster-item';
+    div.dataset.cluster = id;
+    div.innerHTML = `<div class="cluster-dot" style="background:${c.color}"></div>
+      <span class="cluster-name">${c.label}</span>
+      <span class="cluster-count">${c.count}</span>`;
+    legend.appendChild(div);
+
+    // filter button
+    const btn = document.createElement('button');
+    btn.className = 'filter-btn';
+    btn.dataset.cluster = id;
+    btn.style.borderColor = c.color + '60';
+    btn.textContent = c.label;
+    filterBar.appendChild(btn);
+  });
+
+  // click handlers
+  document.querySelectorAll('.filter-btn, .cluster-item').forEach(el => {
+    el.addEventListener('click', () => {
+      const cl = el.dataset.cluster;
+      activeCluster = (cl === String(activeCluster) && cl !== 'all') ? 'all' : cl;
+      document.querySelectorAll('.filter-btn').forEach(b => {
+        b.classList.toggle('active', b.dataset.cluster === activeCluster);
+      });
+      document.querySelectorAll('.cluster-item').forEach(b => {
+        b.classList.toggle('muted', activeCluster !== 'all' && b.dataset.cluster !== activeCluster);
+      });
+      render();
+    });
+  });
+}
+
+// ─── FETCH DATA ───────────────────────────────────────────
+async function load() {
+  try {
+    const res = await fetch('/api/music-map');
+    const data = await res.json();
+
+    if (data.error) {
+      document.getElementById('loading').innerHTML =
+        `<div style="color:#ff6b6b;font-size:0.8rem">${data.error}</div>`;
+      return;
+    }
+
+    allPoints = data.points;
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('nav-count').innerHTML =
+      `<span>${data.n_tracks}</span> tracks mapped`;
+
+    render();
+    buildLegend(allPoints);
+    filterBar.classList.add('visible');
+
+    // personality
+    if (data.summary && data.summary.traits.length) {
+      const sec = document.getElementById('personality-section');
+      sec.style.display = 'block';
+      const traitsEl = document.getElementById('traits');
+      data.summary.traits.forEach(t => {
+        const span = document.createElement('span');
+        span.className = 'trait'; span.textContent = t;
+        traitsEl.appendChild(span);
+      });
+    }
+
+    // radar
+    if (data.summary) drawRadar(data.summary.avg_features);
+
+    // genres
+    if (data.top_genres && data.top_genres.length) {
+      document.getElementById('genres-section').style.display = 'block';
+      const cloud = document.getElementById('genre-cloud');
+      const maxC = data.top_genres[0].count;
+      data.top_genres.forEach(g => {
+        const el = document.createElement('span');
+        el.className = 'genre-tag' + (g.count >= maxC * 0.6 ? ' big' : '');
+        el.textContent = g.genre;
+        cloud.appendChild(el);
+      });
+    }
+
+    // artists
+    if (data.top_artists && data.top_artists.length) {
+      document.getElementById('artists-section').style.display = 'block';
+      const list = document.getElementById('artist-list');
+      data.top_artists.forEach((a, i) => {
+        const li = document.createElement('li');
+        li.innerHTML = `<span class="artist-num">${String(i+1).padStart(2,'0')}</span>${a}`;
+        list.appendChild(li);
+      });
+    }
+
+  } catch (err) {
+    document.getElementById('loading').innerHTML =
+      `<div style="color:#ff6b6b;font-size:0.8rem">Failed to load data. Try refreshing.</div>`;
+  }
+}
+
+load();
+</script>
+</body>
+</html>
