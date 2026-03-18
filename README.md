@@ -30,32 +30,17 @@ The result: a personal "sonic fingerprint" that reveals patterns in your taste y
 ![Landing page ](screenshots/screen-homepage.png)
 ![Your constellation map ](screenshots/screen-play.png)
 ![Cluster filtering — click any cluster to isolate it](screenshots/screen-gamepage.png)
-![Hover tooltip — track info, album art & audio bars](screenshots/screen-gamepage.png)
+![Hover tooltip — track info, album art & audio bars](screenshots/hover-tip.png)
 
 ---
 
 ## 🏗️ Architecture
 
-```
-┌─────────────────────────────────────────────────────┐
-│                      Browser                         │
-│   Landing Page ──► OAuth ──► Constellation Map       │
-│                               │                      │
-│                    Canvas API (interactive map)       │
-└──────────────────────┬────────────────────────────────┘
-                       │ GET /api/music-map
-┌──────────────────────▼────────────────────────────────┐
-│                   Flask Backend                        │
-│                                                        │
-│  SpotifyClient            MusicPipeline                │
-│  ├── get_top_tracks()     ├── _fetch_tracks()          │
-│  ├── get_audio_features() ├── MinMaxScaler             │
-│  └── get_top_artists()    ├── PCA (2D)                 │
-│                           ├── KMeans (5 clusters)      │
-│                           ├── dynamic label_cluster()  │
-│                           └── _build_personality()     │
-└────────────────────────────────────────────────────────┘
-```
+
+
+![Sonigram architecture](sonigram_architecture_v2.svg)
+
+
 
 ---
 
