@@ -593,6 +593,12 @@ async function load() {
     const res = await fetch('/api/music-map');
     const data = await res.json();
 
+    if (res.status === 401 || data.error === 'session_expired') {
+      document.getElementById('loading').innerHTML =
+        `<div style="color:#ff6b6b;font-size:0.8rem">Session expired — <a href="/login" style="color:#1DB954">reconnect Spotify</a></div>`;
+      return;
+    }
+
     if (data.error) {
       document.getElementById('loading').innerHTML =
         `<div style="color:#ff6b6b;font-size:0.8rem">${data.error}</div>`;

@@ -1,14 +1,11 @@
 import os
-import json
-import numpy as np
 from flask import Flask, redirect, request, session, jsonify, render_template
 from dotenv import load_dotenv
-from spotify_client import SpotifyClient
+from spotify_client import SpotifyClient, TokenExpiredError
 from pipeline import MusicPipeline
 
 load_dotenv()
 
-# Ensure Flask finds templates relative to this file, not the cwd
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 app = Flask(__name__, template_folder=os.path.join(BASE_DIR, "templates"))
 app.secret_key = os.getenv("FLASK_SECRET_KEY", "sonigram-secret")
@@ -18,6 +15,32 @@ CLIENT_SECRET = os.getenv("SPOTIFY_CLIENT_SECRET")
 REDIRECT_URI = os.getenv("SPOTIFY_REDIRECT_URI", "http://127.0.0.1:5000/callback")
 
 spotify = SpotifyClient(CLIENT_ID, CLIENT_SECRET, REDIRECT_URI)
+
+
+def get_valid_token():
+    """Return a valid access token, refreshing it automatically if expired."""
+    token = session.get("access_token")
+    if not token:
+        return None
+
+    # Try a lightweight probe — if it fails with 401, refresh
+    try:
+        spotify.get("/me", token)
+        return token
+    except TokenExpiredError:
+        refresh = session.get("refresh_token")
+        if not refresh:
+            return None
+        try:
+            token_data = spotify.refresh_token(refresh)
+            session["access_token"] = token_data["access_token"]
+            # Spotify sometimes issues a new refresh token too
+            if "refresh_token" in token_data:
+                session["refresh_token"] = token_data["refresh_token"]
+            return session["access_token"]
+        except Exception:
+            session.clear()
+            return None
 
 
 @app.route("/")
@@ -52,12 +75,18 @@ def visualize():
 
 @app.route("/api/music-map")
 def music_map():
-    token = session.get("access_token")
+    token = get_valid_token()
     if not token:
-        return jsonify({"error": "Not authenticated"}), 401
+        # Token gone / unrefreshable — ask the frontend to re-login
+        return jsonify({"error": "session_expired"}), 401
 
     pipeline = MusicPipeline(token, spotify)
-    result = pipeline.run()
+    try:
+        result = pipeline.run()
+    except TokenExpiredError:
+        session.clear()
+        return jsonify({"error": "session_expired"}), 401
+
     return jsonify(result)
 
 

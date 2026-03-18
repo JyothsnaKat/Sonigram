@@ -27,9 +27,10 @@ The result: a personal "sonic fingerprint" that reveals patterns in your taste y
 
 ## 🖼️ Screenshots
 
-| Landing Page | Constellation Map | Cluster Filter |
-|---|---|---|
-| Connect with Spotify | Your sonic fingerprint | Isolate any cluster |
+![Landing page ](screenshots/screen-homepage.png)
+![Your constellation map ](screenshots/screen-play.png)
+![Cluster filtering — click any cluster to isolate it](screenshots/screen-gamepage.png)
+![Hover tooltip — track info, album art & audio bars](screenshots/screen-gamepage.png)
 
 ---
 
